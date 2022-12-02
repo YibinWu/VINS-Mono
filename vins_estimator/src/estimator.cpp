@@ -700,6 +700,7 @@ void Estimator::optimization()
     TicToc t_whole, t_prepare;
     vector2double();
 
+    //add marginalization residuals into the optimization procedure, this is from the marginalization of last time. wyb
     if (last_marginalization_info)
     {
         // construct new marginlization_factor
@@ -708,6 +709,7 @@ void Estimator::optimization()
                                  last_marginalization_parameter_blocks);
     }
 
+    //add imu residuals. wyb
     for (int i = 0; i < WINDOW_SIZE; i++)
     {
         int j = i + 1;
@@ -716,6 +718,8 @@ void Estimator::optimization()
         IMUFactor* imu_factor = new IMUFactor(pre_integrations[j]);
         problem.AddResidualBlock(imu_factor, NULL, para_Pose[i], para_SpeedBias[i], para_Pose[j], para_SpeedBias[j]);
     }
+
+    //add feature residuals. wyb
     int f_m_cnt = 0;
     int feature_index = -1;
     for (auto &it_per_id : f_manager.feature)
@@ -766,6 +770,7 @@ void Estimator::optimization()
     ROS_DEBUG("visual measurement count: %d", f_m_cnt);
     ROS_DEBUG("prepare for ceres: %f", t_prepare.toc());
 
+    //add loop closure residuals. wyb
     if(relocalization_info)
     {
         //printf("set relocalization factor! \n");
@@ -823,6 +828,9 @@ void Estimator::optimization()
     double2vector();
 
     TicToc t_whole_marginalization;
+    // This flag is set once a new frame is coming according to teh Parallax of the frames within the sliding window. refer to Estimator::processImage wyb
+    // MARGIN_OLD:         marginalize the oldest frame in the sliding window
+    // MARGIN_SECOND_NEW:  marginalize the second new frame in the sliding window
     if (marginalization_flag == MARGIN_OLD)
     {
         MarginalizationInfo *marginalization_info = new MarginalizationInfo();
@@ -846,6 +854,7 @@ void Estimator::optimization()
             marginalization_info->addResidualBlockInfo(residual_block_info);
         }
 
+        //add the imu preintegration info between the first frame and second frame (pre_integrations[1])into marginalization. wyb
         {
             if (pre_integrations[1]->sum_dt < 10.0)
             {
@@ -857,6 +866,7 @@ void Estimator::optimization()
             }
         }
 
+        //add the features which are observed by the first frame for the first time into marginalization.
         {
             int feature_index = -1;
             for (auto &it_per_id : f_manager.feature)
@@ -903,13 +913,16 @@ void Estimator::optimization()
         }
 
         TicToc t_pre_margin;
+        // add the residuals and jacobians from imu preintegration and features into the parameters block of the marginalization
         marginalization_info->preMarginalize();
         ROS_DEBUG("pre marginalization %f ms", t_pre_margin.toc());
         
         TicToc t_margin;
+        //calculate the marginalization matrix (e.g., the H_p and b_p matrix in Eq.(64) in my paper) via multiple threads. wyb
         marginalization_info->marginalize();
         ROS_DEBUG("marginalization %f ms", t_margin.toc());
 
+        //adjust the position (shift forward) of the remaining states int the window as we removed the oldest frame. wyb
         std::unordered_map<long, double *> addr_shift;
         for (int i = 1; i <= WINDOW_SIZE; i++)
         {
@@ -930,7 +943,7 @@ void Estimator::optimization()
         last_marginalization_parameter_blocks = parameter_blocks;
         
     }
-    else
+    else // marginalize the second new frame. wyb
     {
         if (last_marginalization_info &&
             std::count(std::begin(last_marginalization_parameter_blocks), std::end(last_marginalization_parameter_blocks), para_Pose[WINDOW_SIZE - 1]))

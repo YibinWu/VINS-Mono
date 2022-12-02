@@ -21,8 +21,8 @@ struct ResidualBlockInfo
 
     ceres::CostFunction *cost_function;
     ceres::LossFunction *loss_function;
-    std::vector<double *> parameter_blocks;
-    std::vector<int> drop_set;
+    std::vector<double *> parameter_blocks; //
+    std::vector<int> drop_set;//the id of the states to be marginalized
 
     double **raw_jacobians;
     std::vector<Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>> jacobians;
@@ -55,7 +55,7 @@ class MarginalizationInfo
     std::vector<double *> getParameterBlocks(std::unordered_map<long, double *> &addr_shift);
 
     std::vector<ResidualBlockInfo *> factors;
-    int m, n;
+    int m, n; //m: the number of the states to be marginalized, n: the number of the remaining states. wyb
     std::unordered_map<long, int> parameter_block_size; //global size
     int sum_block_size;
     std::unordered_map<long, int> parameter_block_idx; //local size
